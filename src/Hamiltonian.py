@@ -1,3 +1,75 @@
 """
-Script to generate Hamiltonian for H2 molecule in the STO-3G basis set.
+Generates the reduced qubit Hamiltonian for a molecule.
+
+Pipeline: MolecularData -> PySCF -> FermionOperator -> Jordan-Wigner
+          -> symmetry_conserving_bravyi_kitaev -> SparsePauliOp
 """
+
+import numpy as np
+
+from openfermion import get_fermion_operator, jordan_wigner
+from openfermion.chem import MolecularData
+from openfermion.transforms import symmetry_conserving_bravyi_kitaev
+from openfermionpyscf import run_pyscf
+from qiskit.quantum_info import SparsePauliOp
+
+
+def build_molecule(geometry, basis="sto-3g", multiplicity=1, charge=0):
+    molecule = MolecularData(geometry=geometry, basis=basis,
+                             multiplicity=multiplicity, charge=charge)
+    return run_pyscf(molecule, run_scf=1, run_fci=1)
+
+
+def get_qubit_hamiltonian(molecule):
+    molecular_hamiltonian = molecule.get_molecular_hamiltonian()
+    fermion_hamiltonian = get_fermion_operator(molecular_hamiltonian)
+    return jordan_wigner(fermion_hamiltonian), fermion_hamiltonian
+
+
+def get_reduced_qubit_hamiltonian(fermion_hamiltonian, n_qubits, n_electrons):
+    return symmetry_conserving_bravyi_kitaev(
+        fermion_hamiltonian,
+        active_orbitals=n_qubits,
+        active_fermions=n_electrons,
+    )
+
+
+def openfermion_to_qiskit(qubit_op, n_qubits):
+    pauli_list = []
+    for term, coeff in qubit_op.terms.items():
+        if not term:
+            pauli_str = "I" * n_qubits
+        else:
+            pauli_str = ["I"] * n_qubits
+            for qubit_idx, pauli in term:
+                pauli_str[qubit_idx] = pauli
+            # Qiskit uses reverse qubit ordering
+            pauli_str = "".join(reversed(pauli_str))
+        pauli_list.append((pauli_str, coeff.real))
+    return SparsePauliOp.from_list(pauli_list)
+
+
+def build_reduced_hamiltonian(geometry, basis="sto-3g", multiplicity=1, charge=0):
+    """Return the symmetry-reduced qubit Hamiltonian as a Qiskit SparsePauliOp."""
+    molecule = build_molecule(geometry, basis, multiplicity, charge)
+    _, fermion_hamiltonian = get_qubit_hamiltonian(molecule)
+    reduced_op = get_reduced_qubit_hamiltonian(
+        fermion_hamiltonian, molecule.n_qubits, molecule.n_electrons
+    )
+    # Bravyi-Kitaev symmetry reduction drops 2 qubits from the full register
+    n_reduced_qubits = molecule.n_qubits - 2
+    return openfermion_to_qiskit(reduced_op, n_reduced_qubits)
+
+
+if __name__ == "__main__":
+    H2_GEOMETRY = [("H", (0, 0, 0)), ("H", (0, 0, 0.735))]
+    H_reduced = build_reduced_hamiltonian(H2_GEOMETRY)
+    print(H_reduced)
+    H_matrix = H_reduced.to_matrix()
+    eigenvalues = np.linalg.eigvalsh(H_matrix)
+    print("FCI ground state energy:", eigenvalues[0])
+    # Check against PySCF FCI energy
+    molecule = build_molecule(H2_GEOMETRY)
+    print("PySCF FCI energy:", molecule.fci_energy)
+    # Nuclear repulsion energy
+    print("Nuclear repulsion energy:", molecule.nuclear_repulsion)

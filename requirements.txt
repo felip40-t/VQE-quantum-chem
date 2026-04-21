@@ -6,6 +6,8 @@ h5py==3.16.0
 
 # Quantum chemistry
 pyscf==2.12.1
+openfermion==1.7.1
+openfermionpyscf==0.5
 
 # Quantum computing
 qiskit==2.3.1
@@ -16,3 +18,4 @@ qiskit-ibm-runtime==0.46.1
 jupyterlab==4.5.6
 notebook==7.5.5
 ipywidgets==8.1.8
+
