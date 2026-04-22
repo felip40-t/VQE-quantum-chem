@@ -81,6 +81,26 @@ The script can also be run directly as a sanity check:
 python src/Hamiltonian.py
 ```
 
+### Ansatz construction
+
+`src/Ansatz.py` defines an abstract `Ansatz` base class and a concrete `HEA` (Hardware Efficient Ansatz) implementation:
+
+```python
+from src.Ansatz import HEA
+
+ansatz = HEA(n_qubits=2, depth=2)
+circuit = ansatz.build()   # returns a parameterised QuantumCircuit
+print(circuit.num_parameters)  # 2 * (2+1) * 3 = 18
+```
+
+Each layer applies Rx, Ry, Rz rotations to every qubit, with CNOT entangling gates between adjacent qubits after each layer except the last.
+
+### VQE optimisation
+
+`src/vqe_optimiser.py` provides the objective function and history tracking for the VQE loop (in progress).
+
+Both a noiseless `StatevectorEstimator` and a noisy Aer `EstimatorV2` backend are available. Energy and parameter histories are recorded each iteration for convergence analysis.
+
 ---
  
 ## Status
@@ -89,7 +109,7 @@ python src/Hamiltonian.py
 |-------|-------------|--------|
 | 1 | Environment setup | ✅ |
 | 2 | Chemistry concepts & Hamiltonian generation | ✅ |
-| 3 | Noiseless VQE baseline (H2) | ⏳ |
+| 3 | Noiseless VQE baseline (H2) | 🔄 |
 | 4 | Error decomposition with simulator | ⏳ |
 | 5 | Density-matrix diagnostics | ⏳ |
 | 6 | Real IBM hardware runs | ⏳ |
