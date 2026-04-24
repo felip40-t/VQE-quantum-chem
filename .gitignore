@@ -1,5 +1,6 @@
 .venv/
 notebooks/
+results/
 
 # Ignore Jupyter Notebook checkpoints
 .ipynb_checkpoints/
@@ -9,4 +10,3 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
-

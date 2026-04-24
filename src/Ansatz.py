@@ -40,3 +40,7 @@ class HEA(Ansatz):
                 for q in range(self._n_qubits - 1):
                     circuit.cx(q, q + 1)
         return circuit
+
+    def num_parameters(self) -> int:
+        """Return the number of parameters in the HEA ansatz."""
+        return self._num_parameters
