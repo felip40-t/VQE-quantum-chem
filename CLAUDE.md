@@ -18,14 +18,23 @@ pip install -r requirements.txt
 # Run Hamiltonian pipeline sanity check
 python src/Hamiltonian.py
 
-# Run VQE optimisation (runs dissociation curve after single-point)
-python src/vqe_optimiser.py
+# Run VQE dissociation curve — shot noise only
+python src/vqe_optimiser.py --shots 500
+
+# Run with custom depolarising noise model
+python src/vqe_optimiser.py --noise --shots 500
+
+# Run with IBM Vigo fake backend noise profile
+python src/vqe_optimiser.py --fake-backend --shots 500
+
+# Plot the saved csv
+python src/plot_dissociation.py --csv <filename>
 
 # Launch notebooks
 jupyter lab
 ```
 
-`src/vqe_optimiser.py` imports `Ansatz` and `Hamiltonian` with bare module names (no `src.` prefix), so it must be run from the `src/` directory or with `PYTHONPATH=src`.
+`src/vqe_optimiser.py` imports `Ansatz` and `Hamiltonian` with bare module names (no `src.` prefix), so it must be run with `PYTHONPATH=src` or from the `src/` directory.
 
 ## Architecture
 
@@ -50,11 +59,33 @@ Abstract base class `Ansatz` with one concrete implementation:
 
 ### 3. VQE optimisation — `src/vqe_optimiser.py`
 
-- `vqe_objective` — wraps a parameterised circuit + Hamiltonian into a scalar energy via Qiskit `Estimator.run`.
-- `run_vqe` — calls `scipy.optimize.minimize` with COBYLA (500 iterations, seed 42).
-- `dissociation_curve` — sweeps bond length 0.5–3.0 Å, runs VQE at each point, saves a PDF to `results/`.
+- `vqe_objective` — wraps a parameterised circuit + Hamiltonian into a scalar energy and std via `EstimatorV2.run`.
+- `run_vqe` — calls `scipy.optimize.minimize` with COBYLA (100 iterations, `rhobeg=0.5`, seed 42).
+- `dissociation_data` — sweeps bond length 0.5–3.0 Å over 50 points; transpiles the ansatz once before the loop and warm-starts each optimisation from the previous bond length's optimal parameters.
+- `make_dataframe` — builds a pandas DataFrame from dissociation data; saved as CSV before the process exits.
+- CLI entry point supports four simulation modes via `--noise`, `--fake-backend`, and `--shots` flags.
 
-Two estimators are available at module level: `exact_estimator` (`StatevectorEstimator`) and `noisy_estimator` (`EstimatorV2` from `FakeVigoV2`). The default for all functions is `noisy_estimator`.
+#### Performance optimisations
+- **Single transpilation**: the parameterised ansatz is transpiled once with `generate_preset_pass_manager` and reused for every geometry, eliminating per-step compilation overhead.
+- **Warm-start parameters**: optimal parameters from step `i` seed step `i+1`, reducing COBYLA iterations needed per bond length.
+- **`reduced_hamiltonian_from_molecule`** in `Hamiltonian.py`: accepts a pre-built `MolecularData` to avoid re-running PySCF inside the sweep loop.
+- Results are saved as CSV before plotting, so `--plot-only` can regenerate plots without re-running the simulation.
+
+#### Noise backends
+| Flags | Backend |
+|-------|---------|
+| *(no flags, `--shots` omitted)* | `AerSimulator` — exact (shots=None) |
+| `--shots N` | `AerSimulator` — shot noise only |
+| `--noise --shots N` | `AerSimulator` + `create_noise_model()` — depolarising (0.1 % 1Q, 1 % 2Q) |
+| `--fake-backend --shots N` | `AerSimulator.from_backend(FakeVigoV2)` — IBM Vigo device noise profile |
+
+### 4. Dissociation curve plotting — `src/plot_dissociation.py`
+
+Standalone plotting utility; does not import any local VQE modules, so no `PYTHONPATH` is needed.
+
+- `extract_shots(filename)` — parses shot count from a CSV filename; returns `None` for exact runs.
+- `plot_dissociation_curve(bond_lengths, vqe_energies, vqe_errors, fci_energies, name)` — overlays VQE energies (with error bars) against the FCI reference and saves a PDF to `results/`.
+- CLI: `python src/plot_dissociation.py --csv <filename>` — regenerates a plot from any saved CSV without re-running the simulation.
 
 ### Qubit counting convention
 

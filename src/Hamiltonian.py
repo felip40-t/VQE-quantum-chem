@@ -49,17 +49,21 @@ def openfermion_to_qiskit(qubit_op: QubitOperator, n_qubits: int) -> SparsePauli
     return SparsePauliOp.from_list(pauli_list)
 
 
-def build_reduced_hamiltonian(geometry: list, basis="sto-3g", multiplicity=1, charge=0) -> SparsePauliOp:
-    """Return the symmetry-reduced qubit Hamiltonian as a Qiskit SparsePauliOp."""
-    molecule = build_molecule(geometry, basis, multiplicity, charge)
+def reduced_hamiltonian_from_molecule(molecule: MolecularData) -> SparsePauliOp:
+    """Return the symmetry-reduced qubit Hamiltonian for a pre-built MolecularData."""
     _, fermion_hamiltonian = get_qubit_hamiltonian(molecule)
     reduced_op = get_reduced_qubit_hamiltonian(
         fermion_hamiltonian, molecule.n_qubits, molecule.n_electrons
     )
     # Bravyi-Kitaev symmetry reduction drops 2 qubits from the full register
     n_reduced_qubits = count_qubits(reduced_op)
-    # print(f"Original qubits: {molecule.n_qubits}, Reduced qubits: {n_reduced_qubits}")
     return openfermion_to_qiskit(reduced_op, n_reduced_qubits)
+
+
+def build_reduced_hamiltonian(geometry: list, basis="sto-3g", multiplicity=1, charge=0) -> SparsePauliOp:
+    """Return the symmetry-reduced qubit Hamiltonian as a Qiskit SparsePauliOp."""
+    molecule = build_molecule(geometry, basis, multiplicity, charge)
+    return reduced_hamiltonian_from_molecule(molecule)
 
 
 if __name__ == "__main__":

@@ -88,18 +88,77 @@ python src/Hamiltonian.py
 ```python
 from src.Ansatz import HEA
 
-ansatz = HEA(n_qubits=2, depth=2)
+ansatz = HEA(n_qubits=2, depth=1)
 circuit = ansatz.build()   # returns a parameterised QuantumCircuit
-print(circuit.num_parameters)  # 2 * (2+1) * 3 = 18
+print(circuit.num_parameters)  # 2 * (1+1) * 3 = 12
 ```
 
 Each layer applies Rx, Ry, Rz rotations to every qubit, with CNOT entangling gates between adjacent qubits after each layer except the last.
 
 ### VQE optimisation
 
-`src/vqe_optimiser.py` provides the objective function and history tracking for the VQE loop (in progress).
+`src/vqe_optimiser.py` implements the full VQE loop, dissociation curve generation, and result persistence. It is driven by a CLI with four simulation modes:
 
-Both a noiseless `StatevectorEstimator` and a noisy Aer `EstimatorV2` backend are available. Energy and parameter histories are recorded each iteration for convergence analysis.
+| Mode | Flags | Backend |
+|------|-------|---------|
+| Exact | *(no noise flags, `--shots` omitted)* | `AerSimulator` (noiseless, infinite precision, shots=None) |
+| Shot noise only | `--shots N` | `AerSimulator` (finite shots, no gate errors) |
+| Custom noise model | `--noise --shots N` | `AerSimulator` + depolarising errors (0.1 % 1Q, 1 % 2Q) |
+| Fake backend | `--fake-backend --shots N` | `AerSimulator.from_backend(FakeVigoV2)` — IBM Vigo noise profile |
+
+#### Key performance optimisations
+
+- **Single transpilation** — the parameterised ansatz circuit is transpiled once before the bond-length sweep and reused at every point, avoiding repeated compilation overhead.
+- **Warm-start parameters** — the optimal parameters from one bond length are passed as the starting point for the next, which cuts the number of COBYLA iterations needed to converge.
+- **Reduced iteration budget** — `maxiter` lowered from 500 to 100 with `rhobeg=0.5`; convergence is reliable given the warm start.
+- **`reduced_hamiltonian_from_molecule`** — a new entry point in `Hamiltonian.py` accepts a pre-built `MolecularData` object, avoiding a redundant PySCF SCF/FCI run each iteration.
+- **Build AerSimulator and EstimatorV2 once only** — build the objects once before doing the bond length loop so that they aren't reconstructed for every bond length.
+
+#### CLI reference
+
+```bash
+# Exact simulation (no shot noise)
+python src/vqe_optimiser.py
+
+# Shot noise only (500 shots)
+python src/vqe_optimiser.py --shots 500
+
+# Custom depolarising noise model
+python src/vqe_optimiser.py --noise --shots 500
+
+# IBM Vigo fake backend
+python src/vqe_optimiser.py --fake-backend --shots 500
+```
+
+Results are written to `results/` as both a CSV and a PDF plot. The five dissociation curves already generated are:
+
+- `dissociation_data_exact.csv` — exact simulation (no shot noise)
+- `dissociation_data_shots_500.csv` — shot noise only, 500 shots
+- `dissociation_data_noisy_shots_500.csv` — custom noise model, 500 shots
+- `dissociation_data_noisy_shots_200.csv` — custom noise model, 200 shots
+- `dissociation_data_fake_backend_shots_500.csv` — IBM Vigo fake backend, 500 shots
+
+### Plotting dissociation curves
+
+`src/plot_dissociation.py` is a standalone plotting utility that regenerates a PDF dissociation curve from any saved CSV without re-running the simulation. It reads from `results/` and writes the output PDF back to `results/`, inferring the shot count from the filename automatically.
+
+```python
+from src.plot_dissociation import plot_dissociation_curve
+
+plot_dissociation_curve(
+    bond_lengths, vqe_energies, vqe_errors, fci_energies,
+    name="dissociation_data_shots_500.csv",
+)
+```
+
+The script can also be invoked directly from the CLI:
+
+```bash
+# Re-plot from any saved CSV
+python src/plot_dissociation.py --csv dissociation_data_shots_500.csv
+```
+
+Each plot overlays VQE energies (with shot-noise error bars) against the exact FCI reference curve.
 
 ---
  
@@ -109,8 +168,8 @@ Both a noiseless `StatevectorEstimator` and a noisy Aer `EstimatorV2` backend ar
 |-------|-------------|--------|
 | 1 | Environment setup | ✅ |
 | 2 | Chemistry concepts & Hamiltonian generation | ✅ |
-| 3 | Noiseless VQE baseline (H2) | 🔄 |
-| 4 | Error decomposition with simulator | ⏳ |
+| 3 | VQE baseline and dissociation curves (H2, STO-3G) | ✅ |
+| 4 | Error decomposition with simulator | 🔄 |
 | 5 | Density-matrix diagnostics | ⏳ |
 | 6 | Real IBM hardware runs | ⏳ |
  
