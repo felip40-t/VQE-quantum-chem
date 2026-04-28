@@ -23,6 +23,7 @@ A Variational Quantum Eigensolver (VQE) implementation for computing molecular g
 | [Qiskit](https://qiskit.org/) | Quantum circuit construction and simulation |
 | [qiskit-ibm-runtime](https://github.com/Qiskit/qiskit-ibm-runtime) | IBM hardware execution and noise models |
 | [NumPy / SciPy](https://scipy.org/) | Numerical routines, optimisers (COBYLA, L-BFGS-B) |
+| [pandas](https://pandas.pydata.org/) | Results persistence (CSV I/O, DataFrame construction) |
 | [Matplotlib](https://matplotlib.org/) | Results visualisation |
  
 ---
@@ -88,12 +89,12 @@ python src/Hamiltonian.py
 ```python
 from src.Ansatz import HEA
 
-ansatz = HEA(n_qubits=2, depth=1)
+ansatz = HEA(n_qubits=2, n_layers=1)
 circuit = ansatz.build()   # returns a parameterised QuantumCircuit
-print(circuit.num_parameters)  # 2 * (1+1) * 3 = 12
+print(ansatz.num_parameters())  # 2 * 2 * 3 = 12
 ```
 
-Each layer applies Rx, Ry, Rz rotations to every qubit, with CNOT entangling gates between adjacent qubits after each layer except the last.
+Each layer applies Rx, Ry, Rz rotations to every qubit. CNOT entangling gates are inserted between consecutive layers but not after the final layer, so a single-layer ansatz (`n_layers=1`) has no entanglement.
 
 ### VQE optimisation
 
@@ -130,13 +131,26 @@ python src/vqe_optimiser.py --noise --shots 500
 python src/vqe_optimiser.py --fake-backend --shots 500
 ```
 
-Results are written to `results/` as both a CSV and a PDF plot. The five dissociation curves already generated are:
+Results are written to `results/` as a CSV (columns: `bond_length`, `vqe_energy`, `vqe_std`, `fci_energy`, `opt_params`) and a PDF plot. 
 
-- `dissociation_data_exact.csv` — exact simulation (no shot noise)
-- `dissociation_data_shots_500.csv` — shot noise only, 500 shots
-- `dissociation_data_noisy_shots_500.csv` — custom noise model, 500 shots
-- `dissociation_data_noisy_shots_200.csv` — custom noise model, 200 shots
-- `dissociation_data_fake_backend_shots_500.csv` — IBM Vigo fake backend, 500 shots
+### Density-matrix diagnostics
+
+`src/DensityMatrix.py` provides a lightweight `DensityMatrix` class for analysing reconstructed quantum states:
+
+```python
+from src.DensityMatrix import DensityMatrix
+
+dm = DensityMatrix(n_qubits=2)
+dm.from_statevector_pure(statevector)      # initialise from a pure statevector
+dm.apply_unitary(unitary)                  # propagate under a unitary
+energy = dm.expectation_value(observable)  # Tr(rho * O)
+```
+
+| Method | Description |
+|--------|-------------|
+| `from_statevector_pure(psi)` | Sets `rho = |psi><psi|` |
+| `apply_unitary(U)` | Updates `rho -> U rho U†` |
+| `expectation_value(O)` | Returns `Tr(rho O)` |
 
 ### Plotting dissociation curves
 
@@ -170,7 +184,7 @@ Each plot overlays VQE energies (with shot-noise error bars) against the exact F
 | 2 | Chemistry concepts & Hamiltonian generation | ✅ |
 | 3 | VQE baseline and dissociation curves (H2, STO-3G) | ✅ |
 | 4 | Error decomposition with simulator | 🔄 |
-| 5 | Density-matrix diagnostics | ⏳ |
+| 5 | Density-matrix diagnostics | 🔄 |
 | 6 | Real IBM hardware runs | ⏳ |
  
 

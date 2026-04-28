@@ -28,12 +28,10 @@ from qiskit_aer.noise import (
 )
 
 NUM_POINTS = 50
-DEFAULT_SHOTS = 100
 
 def create_noise_model()->NoiseModel:
     """Create a basic noise model"""
     noise_model = NoiseModel()
-
     # Depolarising error for single and two-qubit gates
     error_1q = depolarizing_error(0.001, 1)
     error_2q = depolarizing_error(0.01, 2) 
@@ -48,7 +46,6 @@ def vqe_objective(params: np.ndarray, circuit: QuantumCircuit, observable: Spars
     result = job.result()
     energy = result[0].data.evs.real
     std = result[0].data.stds.real
-
     return float(energy), float(std)
 
 
@@ -62,7 +59,6 @@ def run_vqe(transpiled_circuit: QuantumCircuit, observable: SparsePauliOp, estim
         method='COBYLA',
         options={'maxiter': 100, 'rhobeg': 0.5}
     )
-
     return result.fun, result.x, vqe_objective(result.x, transpiled_circuit, observable, estimator)[1]
 
 def dissociation_data(ansatz: HEA, num_points: int, noise_model: NoiseModel, shots: int, fake_backend: bool) -> tuple[np.ndarray, list[float], list[float], list[float]]:
@@ -88,6 +84,7 @@ def dissociation_data(ansatz: HEA, num_points: int, noise_model: NoiseModel, sho
     vqe_energies = []
     vqe_errors = []
     fci_energies = []
+    opt_params = []
     for i, r in enumerate(bond_lengths, 1):
         geometry = [("H", (0, 0, 0)), ("H", (0, 0, r))]
         molecule_data = build_molecule(geometry)
@@ -96,19 +93,21 @@ def dissociation_data(ansatz: HEA, num_points: int, noise_model: NoiseModel, sho
 
         energy, warm_params, std = run_vqe(transpiled_circuit, observable, estimator, warm_params)
         vqe_energies.append(energy)
+        opt_params.append(warm_params)
         vqe_errors.append(std)
         fci_energies.append(molecule_data.fci_energy)
         print(f"[{i}/{num_points}] r={r:.3f} Å  E={energy:.6f} Ha", flush=True)
 
-    return bond_lengths, vqe_energies, vqe_errors, fci_energies
+    return bond_lengths, vqe_energies, vqe_errors, fci_energies, opt_params
 
-def make_dataframe(bond_lengths: np.ndarray, vqe_energies: list[float], vqe_errors: list[float], fci_energies: list[float]):
+def make_dataframe(bond_lengths: np.ndarray, vqe_energies: list[float], vqe_errors: list[float], fci_energies: list[float], opt_params: list[np.ndarray]):
     """Create a pandas DataFrame from the dissociation data."""
     df = pd.DataFrame({
         'bond_length': bond_lengths,
         'vqe_energy': vqe_energies,
         'vqe_std': vqe_errors,
-        'fci_energy': fci_energies
+        'fci_energy': fci_energies,
+        'opt_params': opt_params
     })
     return df
 
@@ -122,16 +121,20 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     t0 = time.perf_counter()
-    ansatz = HEA(n_qubits=2, depth=1)
+    ansatz = HEA(n_qubits=2, n_layers=1)
     noise_model = create_noise_model() if args.noise else None
-    bond_lengths, vqe_energies, vqe_errors, fci_energies = dissociation_data(
+    if args.shots is None and (args.noise or args.fake_backend):
+        print("Warning: Noise models have no effect when using an exact estimator (shots=None).", 
+                "Use --shots to specify a finite number of shots for the noise to have an effect.")
+        exit(1)
+    bond_lengths, vqe_energies, vqe_errors, fci_energies, opt_params = dissociation_data(
         ansatz,
         num_points=NUM_POINTS,
         noise_model=noise_model,
         shots=args.shots,
         fake_backend=args.fake_backend,
     )
-    data = make_dataframe(bond_lengths, vqe_energies, vqe_errors, fci_energies)
+    data = make_dataframe(bond_lengths, vqe_energies, vqe_errors, fci_energies, opt_params)
     if args.noise:
         filename = f"dissociation_data_noisy_shots_{args.shots}.csv"
     elif args.fake_backend:

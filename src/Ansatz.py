@@ -18,17 +18,23 @@ class Ansatz(ABC):
 
 class HEA(Ansatz):
 
-    def __init__(self, n_qubits: int, depth: int):
+    def __init__(self, n_qubits: int, n_layers: int):
         self._n_qubits = n_qubits
-        self.depth = depth
-        self._num_parameters = n_qubits * (depth + 1) * 3  # Each layer has 3 parameters per qubit
-
+        self._n_layers = n_layers
+        # Each layer has 3 parameters per qubit, but there is always a final set of rotations
+        # after the last layer, so we have (n_layers + 1) sets of rotations in total.
+        self._num_parameters = n_qubits * (n_layers + 1) * 3  
     def build(self) -> QuantumCircuit:
-        """Build a Hardware Efficient Ansatz (HEA) circuit."""
+        """
+        Build a Hardware Efficient Ansatz (HEA) circuit.
+        The HEA consists of alternating layers of single-qubit rotations and 
+        entangling gates (CNOTs). Each layer applies RX, RY, and RZ rotations
+        to each qubit, followed by a chain of CNOT gates.
+        """
         params = ParameterVector("theta", length=self._num_parameters)
         circuit = QuantumCircuit(self._n_qubits)
         param_idx = 0
-        for d in range(self.depth + 1):
+        for d in range(self._n_layers+1):
             for q in range(self._n_qubits):
                 circuit.rx(params[param_idx], q)
                 param_idx += 1
@@ -36,7 +42,7 @@ class HEA(Ansatz):
                 param_idx += 1
                 circuit.rz(params[param_idx], q)
                 param_idx += 1
-            if d < self.depth:
+            if d < self._n_layers: # Add entangling gates between layers, but not after the last layer
                 for q in range(self._n_qubits - 1):
                     circuit.cx(q, q + 1)
         return circuit
