@@ -1,6 +1,8 @@
 .venv/
+.vscode/
 notebooks/
 results/
+.claude/
 
 # Ignore Jupyter Notebook checkpoints
 .ipynb_checkpoints/

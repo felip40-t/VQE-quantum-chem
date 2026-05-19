@@ -24,6 +24,22 @@ class HEA(Ansatz):
         # Each layer has 3 parameters per qubit, but there is always a final set of rotations
         # after the last layer, so we have (n_layers + 1) sets of rotations in total.
         self._num_parameters = n_qubits * (n_layers + 1) * 3  
+
+    @property
+    def n_qubits(self) -> int:
+        """Return the number of qubits in the ansatz."""
+        return self._n_qubits
+
+    @property
+    def n_layers(self) -> int:
+        """Return the number of layers in the ansatz."""
+        return self._n_layers
+
+    @property
+    def num_parameters(self) -> int:
+        """Return the number of parameters in the ansatz."""
+        return self._num_parameters
+
     def build(self) -> QuantumCircuit:
         """
         Build a Hardware Efficient Ansatz (HEA) circuit.
@@ -46,7 +62,3 @@ class HEA(Ansatz):
                 for q in range(self._n_qubits - 1):
                     circuit.cx(q, q + 1)
         return circuit
-
-    def num_parameters(self) -> int:
-        """Return the number of parameters in the HEA ansatz."""
-        return self._num_parameters

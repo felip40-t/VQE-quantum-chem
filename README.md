@@ -1,6 +1,8 @@
 # VQE Quantum Chemistry
  
 A Variational Quantum Eigensolver (VQE) implementation for computing molecular ground-state energies, with a focus on noise characterisation and density-matrix diagnostics on real IBM quantum hardware.
+
+Version: 2.2.0
  
 ---
  
@@ -60,10 +62,10 @@ QiskitRuntimeService.save_account(channel='ibm_quantum', token='YOUR_API_TOKEN')
 
 ### Generating the reduced qubit Hamiltonian
 
-`src/Hamiltonian.py` implements the full pipeline from molecule geometry to a symmetry-reduced Qiskit `SparsePauliOp`. The top-level function is `build_reduced_hamiltonian`:
+`src/hamiltonian.py` implements the full pipeline from molecule geometry to a symmetry-reduced Qiskit `SparsePauliOp`. The top-level function is `build_reduced_hamiltonian`:
 
 ```python
-from src.Hamiltonian import build_reduced_hamiltonian
+from src.hamiltonian import build_reduced_hamiltonian
 
 H2_GEOMETRY = [("H", (0, 0, 0)), ("H", (0, 0, 0.735))]
 H = build_reduced_hamiltonian(H2_GEOMETRY)
@@ -79,7 +81,7 @@ The pipeline runs in four stages:
 The script can also be run directly as a sanity check:
 
 ```bash
-python src/Hamiltonian.py
+python src/hamiltonian.py
 ```
 
 ### Ansatz construction
@@ -98,7 +100,7 @@ Each layer applies Rx, Ry, Rz rotations to every qubit. CNOT entangling gates ar
 
 ### VQE optimisation
 
-`src/vqe_optimiser.py` implements the full VQE loop, dissociation curve generation, and result persistence. It is driven by a CLI with four simulation modes:
+`src/main.py` implements the full VQE loop, dissociation curve generation, density-matrix reconstruction, and result persistence. It is driven by a CLI with four simulation modes:
 
 | Mode | Flags | Backend |
 |------|-------|---------|
@@ -112,30 +114,37 @@ Each layer applies Rx, Ry, Rz rotations to every qubit. CNOT entangling gates ar
 - **Single transpilation** — the parameterised ansatz circuit is transpiled once before the bond-length sweep and reused at every point, avoiding repeated compilation overhead.
 - **Warm-start parameters** — the optimal parameters from one bond length are passed as the starting point for the next, which cuts the number of COBYLA iterations needed to converge.
 - **Reduced iteration budget** — `maxiter` lowered from 500 to 100 with `rhobeg=0.5`; convergence is reliable given the warm start.
-- **`reduced_hamiltonian_from_molecule`** — a new entry point in `Hamiltonian.py` accepts a pre-built `MolecularData` object, avoiding a redundant PySCF SCF/FCI run each iteration.
+- **`reduced_hamiltonian_from_molecule`** — entry point in `hamiltonian.py` that accepts a pre-built `MolecularData` object, avoiding a redundant PySCF SCF/FCI run each iteration.
 - **Build AerSimulator and EstimatorV2 once only** — build the objects once before doing the bond length loop so that they aren't reconstructed for every bond length.
 
 #### CLI reference
 
 ```bash
 # Exact simulation (no shot noise)
-python src/vqe_optimiser.py
+python src/main.py
 
 # Shot noise only (500 shots)
-python src/vqe_optimiser.py --shots 500
+python src/main.py --shots 500
 
 # Custom depolarising noise model
-python src/vqe_optimiser.py --noise --shots 500
+python src/main.py --noise --shots 500
 
 # IBM Vigo fake backend
-python src/vqe_optimiser.py --fake-backend --shots 500
+python src/main.py --fake-backend --shots 500
+
+# Run all four modes in one go
+python src/main.py --all --shots 500
 ```
 
-Results are written to `results/` as a CSV (columns: `bond_length`, `vqe_energy`, `vqe_std`, `fci_energy`, `opt_params`) and a PDF plot. 
+Results are written to `results/` as:
+- **CSV** per mode — columns: `bond_length`, `vqe_energy`, `vqe_std`, `opt_params`; FCI reference saved separately as `fci_energies.csv`
+- **NPZ** per mode — stacked arrays: `bond_lengths`, `rho_full` (full density matrix at each bond length), `rdm_1` (1-RDM)
 
 ### Density-matrix diagnostics
 
-`src/DensityMatrix.py` provides a lightweight `DensityMatrix` class for analysing reconstructed quantum states:
+Two modules handle density-matrix work:
+
+**`src/DensityMatrix.py`** — lightweight container class:
 
 ```python
 from src.DensityMatrix import DensityMatrix
@@ -151,6 +160,12 @@ energy = dm.expectation_value(observable)  # Tr(rho * O)
 | `from_statevector_pure(psi)` | Sets `rho = |psi><psi|` |
 | `apply_unitary(U)` | Updates `rho -> U rho U†` |
 | `expectation_value(O)` | Returns `Tr(rho O)` |
+
+**`src/reconstruct.py`** — Pauli tomography and 1-RDM reconstruction. During the VQE sweep, `main.py` calls these to reconstruct the full state and reduced density matrix at each bond length:
+
+- `measure_exp_vals` — measures expectation values of all `4^n` Pauli operators via `EstimatorV2`
+- `reconstruct_density_matrix` — expands `rho` in the Pauli basis from those expectation values
+- `reconstruct_1rdm` — contracts the full density matrix to the 1-body reduced density matrix using the Bravyi-Kitaev mapped `a_p† a_q` operators
 
 ### Plotting dissociation curves
 

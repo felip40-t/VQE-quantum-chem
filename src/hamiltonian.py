@@ -7,7 +7,14 @@ Pipeline: MolecularData -> PySCF -> FermionOperator -> Jordan-Wigner
 
 import numpy as np
 
-from openfermion import FermionOperator, QubitOperator, count_qubits, get_fermion_operator, jordan_wigner
+from openfermion import (
+    FermionOperator, 
+    QubitOperator, 
+    count_qubits, 
+    get_fermion_operator, 
+    jordan_wigner,
+    get_sparse_operator,
+)
 from openfermion.chem import MolecularData
 from openfermion.transforms import symmetry_conserving_bravyi_kitaev
 from openfermionpyscf import run_pyscf
@@ -64,6 +71,19 @@ def build_reduced_hamiltonian(geometry: list, basis="sto-3g", multiplicity=1, ch
     """Return the symmetry-reduced qubit Hamiltonian as a Qiskit SparsePauliOp."""
     molecule = build_molecule(geometry, basis, multiplicity, charge)
     return reduced_hamiltonian_from_molecule(molecule)
+
+def map_fermionic_op_to_qubit_op(p, q, n_qubits, n_electrons) -> QubitOperator:
+    """Map a fermionic operator to a qubit operator using the Brayi-Kitaev transformation."""
+    # Create the fermionic operator for the given indices
+    fermion_op = FermionOperator(f'{p}^ {q}') # a_p^ a_q
+    # Map to qubit operator using the Bravyi-Kitaev transformation
+    qubit_op = symmetry_conserving_bravyi_kitaev(fermion_op, active_orbitals=n_qubits, active_fermions=n_electrons)
+    return qubit_op
+
+def qubit_op_to_matrix(qubit_op: QubitOperator, n_qubits: int) -> np.ndarray:
+    """Convert a QubitOperator to a dense matrix representation."""
+    sparse_op = get_sparse_operator(qubit_op, n_qubits)
+    return sparse_op.toarray()
 
 
 if __name__ == "__main__":
