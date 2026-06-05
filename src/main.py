@@ -8,32 +8,34 @@ import pandas as pd
 from scipy.optimize import minimize
 from pathlib import Path
 
-RESULTS_DIR = Path(__file__).parent.parent / "results"
-NUM_POINTS = 25
-
 from Ansatz import HEA
 from hamiltonian import build_molecule, reduced_hamiltonian_from_molecule
 from utils import create_noise_model, vqe_objective, save_csv, save_npz
+from reconstruct import measure_exp_vals, reconstruct_density_matrix, reconstruct_1rdm
 
 from qiskit.quantum_info import SparsePauliOp
 from qiskit import QuantumCircuit
 from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
-from qiskit_ibm_runtime import EstimatorV2, Options
+from qiskit_ibm_runtime import EstimatorV2
+from qiskit_aer.noise import NoiseModel
 from qiskit_ibm_runtime.fake_provider import FakeVigoV2 as FakeVigo
 from qiskit_aer import AerSimulator
 
+RESULTS_DIR = Path(__file__).parent.parent / "results" / "h2" / "data"
+NUM_POINTS = 50
 
 def run_vqe(transpiled_circuit: QuantumCircuit, observable: SparsePauliOp, estimator: EstimatorV2,
             initial_params: np.ndarray) -> tuple[float, np.ndarray]:
     """Run the VQE optimization on a pre-transpiled circuit with a layout-aligned observable."""
-    result = minimize(
-        lambda params, *args: vqe_objective(params, *args)[0],
-        initial_params,
-        args=(transpiled_circuit, observable, estimator),
-        method='COBYLA',
-        options={'maxiter': 100, 'rhobeg': 0.5}
-    )
-    return result.fun, result.x, vqe_objective(result.x, transpiled_circuit, observable, estimator)[1]
+    last_std = [0.0]
+
+    def objective(params):
+        energy, std = vqe_objective(params, transpiled_circuit, observable, estimator)
+        last_std[0] = std
+        return energy
+
+    result = minimize(objective, initial_params, method='COBYLA', options={'maxiter': 100, 'rhobeg': 0.5})
+    return result.fun, result.x, last_std[0]
 
 def dissociation_data(ansatz: HEA, num_points: int, noise_model: NoiseModel, shots: int, fake_backend: bool) -> tuple[np.ndarray, list[float], list[float], list[float]]:
     """Plot the dissociation curve for H2."""
@@ -53,7 +55,7 @@ def dissociation_data(ansatz: HEA, num_points: int, noise_model: NoiseModel, sho
     transpiled_circuit = pm.run(raw_circuit)
 
     rng = np.random.default_rng(seed=42)
-    warm_params = rng.uniform(0, 2 * np.pi, size=ansatz.num_parameters())
+    warm_params = rng.uniform(0, 2 * np.pi, size=ansatz.num_parameters)
 
     vqe_energies = []
     vqe_errors = []
@@ -80,12 +82,11 @@ def dissociation_data(ansatz: HEA, num_points: int, noise_model: NoiseModel, sho
         opt_params.append(warm_params)
         fci_energies.append(molecule_data.fci_energy)
         rho_fulls.append(rho_full.matrix)
-        rdm_1s.append(rdm_1.matrix)
+        rdm_1s.append(rdm_1)
 
         print(f"[{i}/{num_points}] r={r:.3f} Å  E={energy:.6f} Ha", flush=True)
 
     return bond_lengths, vqe_energies, vqe_errors, fci_energies, opt_params, rho_fulls, rdm_1s
-
 
 def run_all_modes(ansatz: HEA, num_points: int, shots: int) -> None:
     """Run all 4 noise modes and save per-mode CSV and NPZ files."""

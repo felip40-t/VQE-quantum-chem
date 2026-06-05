@@ -37,13 +37,13 @@ def vqe_objective(params: np.ndarray, circuit: QuantumCircuit, observable: Spars
 
 def save_csv(df: pd.DataFrame, filepath: Path) -> None:
     """Save a DataFrame to CSV, creating parent directories as needed."""
-    filepath.parent.mkdir(exist_ok=True)
+    filepath.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(filepath, index=False)
 
 
 def save_npz(bond_lengths: np.ndarray, rho_fulls: list[np.ndarray], rdm_1s: list[np.ndarray], filepath: Path) -> None:
     """Save stacked density matrices and 1-RDMs to a .npz file."""
-    filepath.parent.mkdir(exist_ok=True)
+    filepath.parent.mkdir(parents=True, exist_ok=True)
     np.savez(
         filepath,
         bond_lengths=bond_lengths,

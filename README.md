@@ -2,7 +2,7 @@
  
 A Variational Quantum Eigensolver (VQE) implementation for computing molecular ground-state energies, with a focus on noise characterisation and density-matrix diagnostics on real IBM quantum hardware.
 
-Version: 2.2.0
+Version: 2.2.1
  
 ---
  
@@ -34,7 +34,6 @@ Version: 2.2.0
 ### Prerequisites
  
 - Python 3.10+
-- An [IBM Quantum account](https://quantum.ibm.com/)
  
 ### Setup
  
@@ -47,8 +46,11 @@ source .venv/bin/activate        # Windows: venv\Scripts\activate
  
 pip install -r requirements.txt
 ```
-### IBM Quantum credentials
- 
+
+### IBM Quantum credentials (Phase 6 only)
+
+Real hardware runs (Phase 6) require an [IBM Quantum account](https://quantum.ibm.com/). All earlier phases run locally via Aer simulators.
+
 ```bash
 python -c "
 from qiskit_ibm_runtime import QiskitRuntimeService
@@ -93,7 +95,7 @@ from src.Ansatz import HEA
 
 ansatz = HEA(n_qubits=2, n_layers=1)
 circuit = ansatz.build()   # returns a parameterised QuantumCircuit
-print(ansatz.num_parameters())  # 2 * 2 * 3 = 12
+print(ansatz.num_parameters)  # 2 * 2 * 3 = 12
 ```
 
 Each layer applies Rx, Ry, Rz rotations to every qubit. CNOT entangling gates are inserted between consecutive layers but not after the final layer, so a single-layer ansatz (`n_layers=1`) has no entanglement.

@@ -1,9 +1,6 @@
 """Class for a density matrix object."""
 
 import numpy as np
-import pandas as pd
-
-from Ansatz import HEA
 
 class DensityMatrix:
     """Class representing a density matrix."""
@@ -76,26 +73,6 @@ class DensityMatrix:
             return False
         return True
 
-    def partial_trace(self, subsystem: int)-> 'DensityMatrix':
-        """
-        Calculate the partial trace of a density matrix over a subsystem.
-
-        rho is indexed as rho[a*dim+b, c*dim+d] where (a,c) belong to subsystem 1
-        and (b,d) to subsystem 2.  Reshape to rho4[a,b,c,d] and contract accordingly.
-        """
-        dim = 2
-        rho4 = self._matrix.reshape(dim, dim, dim, dim)
-        if subsystem == 1:
-            matrix = DensityMatrix(self.n_qubits // 2)
-            matrix.matrix = np.einsum('kikj->ij', rho4)
-            return matrix
-        elif subsystem == 2:
-            matrix = DensityMatrix(self.n_qubits // 2)
-            matrix.matrix = np.einsum('ikjk->ij', rho4)
-            return matrix
-        else:
-            raise ValueError("subsystem must be 1 or 2")
-
     def frobenius_distance(self, other: 'DensityMatrix') -> float:
         """Calculate the Frobenius distance between this density matrix and another."""
         return np.linalg.norm(self._matrix - other._matrix, 'fro')
@@ -104,13 +81,12 @@ class DensityMatrix:
         """Return the nearest valid density matrix using Higham's projection."""
         # Eigen-decomposition
         eigenvalues, eigenvectors = np.linalg.eigh(self._matrix)
-        # Diagonalise
+        # Clip negative eigenvalues to zero
         eigenvalues = np.maximum(eigenvalues, 0)
-        # Normalise
-        eigenvalues /= np.sum(eigenvalues)
-        diag = np.diag(eigenvalues)
         # Reconstruct the matrix
-        projected_matrix = eigenvectors @ diag @ eigenvectors.conj().T
+        projected_matrix = eigenvectors @ np.diag(eigenvalues) @ eigenvectors.conj().T
+        # Normalize to ensure trace 1
+        projected_matrix /= np.trace(projected_matrix)
         # Create a new density matrix with the projected matrix
         new_matrix = DensityMatrix(self._n_qubits)
         new_matrix.matrix = projected_matrix

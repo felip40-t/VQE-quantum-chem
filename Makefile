@@ -1,7 +1,7 @@
 SHOTS ?= 500
 CSV   ?=
 
-.PHONY: help setup hamiltonian run run-shots run-noise run-fake plot merge notebooks
+.PHONY: help setup hamiltonian run run-shots run-noise run-fake plot notebooks
 
 help:
 	@echo "Usage:"
@@ -12,7 +12,6 @@ help:
 	@echo "  make run-noise         VQE with depolarising noise  (SHOTS=500)"
 	@echo "  make run-fake          VQE with IBM Vigo fake backend  (SHOTS=500)"
 	@echo "  make plot CSV=<file>   Plot dissociation curve from a saved CSV"
-	@echo "  make merge             Merge all four mode CSVs and plot combined curve"
 	@echo "  make notebooks         Launch Jupyter Lab"
 	@echo ""
 	@echo "Override shot count:  make run-shots SHOTS=1000"
@@ -22,28 +21,25 @@ setup:
 	.venv/bin/pip install -r requirements.txt
 
 hamiltonian:
-	python src/Hamiltonian.py
+	python src/hamiltonian.py
 
 run-all:
-	python src/vqe_optimiser.py --shots $(SHOTS) --all
+	python src/main.py --shots $(SHOTS) --all
 
 run-shots:
-	python src/vqe_optimiser.py --shots $(SHOTS)
+	python src/main.py --shots $(SHOTS)
 
 run-noise:
-	python src/vqe_optimiser.py --noise --shots $(SHOTS)
+	python src/main.py --noise --shots $(SHOTS)
 
 run-fake:
-	python src/vqe_optimiser.py --fake-backend --shots $(SHOTS)
+	python src/main.py --fake-backend --shots $(SHOTS)
 
 plot:
 ifndef CSV
 	$(error CSV is not set. Usage: make plot CSV=<filename>)
 endif
 	python src/plot_dissociation.py --csv $(CSV)
-
-merge:
-	python src/plot_dissociation.py --merge
 
 notebooks:
 	jupyter lab
